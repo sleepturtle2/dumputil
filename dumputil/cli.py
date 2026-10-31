@@ -10,27 +10,46 @@ from .engines import DumpError, neo, pg
 
 ENGINES = {pg.NAME: pg, neo.NAME: neo}
 
-CONFIG = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "dumputil" / "config"
+CONFIG_NAME = "dumputil.ini"
 
-# Profile keys, in the order `configure` asks for them. *_password_var names the env var that holds a
-# password (filled from `secrets`); the value is copied to the var the engine's own tools read.
-KEYS = ("pg_bin", "pg_host", "pg_port", "pg_user", "pg_db", "pg_password_var",
-        "neo4j_home", "neo4j_conf", "neo4j_uri", "neo4j_user", "neo4j_password_var",
-        "neo_node_key", "neo_scratch_port", "java_home", "secrets")
+# Keys holding paths resolve relative to the ini file's directory, so a repo can point at its own lib/.
+PATH_KEYS = ("pg_bin", "neo4j_home", "neo4j_conf", "java_home", "secrets")
+# *_password_var names the env var holding a password (filled from `secrets`); its value is copied to
+# the var the engine's own tools read.
 PASSWORD_VARS = {"pg_password_var": "PGPASSWORD", "neo4j_password_var": "NEO4J_PASSWORD"}
 
 
-def _section(name):
-    return "default" if name in (None, "default") else f"profile {name}"
+def find_config(explicit=None):
+    """--config, else $DUMPUTIL_CONFIG, else dumputil.ini in cwd or any parent. None when absent."""
+    given = explicit or os.environ.get("DUMPUTIL_CONFIG")
+    if given:
+        p = Path(given)
+        if not p.is_file():
+            raise DumpError(f"{p}: config file not found")
+        return p
+    for d in [Path.cwd(), *Path.cwd().parents]:
+        if (d / CONFIG_NAME).is_file():
+            return d / CONFIG_NAME
+    return None
 
 
-def load_profile(name):
+def load_profile(name, config):
+    """Section `name` of the ini (its [DEFAULT] keys included); [DEFAULT] alone when name is None."""
+    if config is None:
+        if name:
+            raise DumpError(f"profile {name!r} requested but no {CONFIG_NAME} found")
+        return {}
     cp = configparser.ConfigParser()
-    cp.read(CONFIG)
-    section = _section(name)
-    if name and section not in cp:
-        raise DumpError(f"profile {name!r} not found in {CONFIG}")
-    profile = dict(cp[section]) if section in cp else {}
+    cp.read(config)
+    if name is None:
+        profile = dict(cp.defaults())
+    elif name in cp:
+        profile = dict(cp[name])
+    else:
+        raise DumpError(f"profile {name!r} not in {config} (have: {', '.join(cp.sections()) or 'none'})")
+    for key in PATH_KEYS:
+        if profile.get(key):
+            profile[key] = str((config.parent / Path(profile[key]).expanduser()).resolve())
     if profile.get("secrets"):
         _source(profile["secrets"])
     for key, target in PASSWORD_VARS.items():
@@ -52,49 +71,30 @@ def _source(path):
         os.environ.setdefault(k.strip(), v.strip().strip('"').strip("'"))
 
 
-def _configure(args, _profile):
-    cp = configparser.ConfigParser()
-    cp.read(CONFIG)
-    section = _section(args.profile)
-    if section not in cp:
-        cp[section] = {}
-    print(f"profile [{section}] → {CONFIG}  (enter keeps the current value, '-' clears it)")
-    for k in KEYS:
-        cur = cp[section].get(k, "")
-        v = input(f"  {k} [{cur}]: ").strip()
-        if v == "-":
-            cp[section].pop(k, None)
-        elif v:
-            cp[section][k] = v
-    CONFIG.parent.mkdir(parents=True, exist_ok=True)
-    with open(CONFIG, "w") as f:
-        cp.write(f)
-    return 0
-
-
 def build_parser():
     p = argparse.ArgumentParser(prog="dumputil",
                                 description="Exact schema and content diff of database dumps.",
                                 epilog="exit codes: 0 identical, 1 differences, 2 error")
     p.add_argument("--version", action="version", version=f"dumputil {__version__}")
-    p.add_argument("--profile", metavar="NAME", help=f"profile section in {CONFIG} (default: [default])")
+    p.add_argument("--config", metavar="FILE",
+                   help=f"ini file (default: $DUMPUTIL_CONFIG, else {CONFIG_NAME} in cwd or a parent)")
+    p.add_argument("--profile", metavar="NAME", default=os.environ.get("DUMPUTIL_PROFILE"),
+                   help="ini section to use (default: $DUMPUTIL_PROFILE, else [DEFAULT] keys only)")
     p.add_argument("--output", choices=("text", "json"), default="text")
     p.add_argument("-q", "--quiet", action="store_true", help="no report, exit code only")
     p.add_argument("--rows", type=int, default=20, metavar="N", help="rows printed per table per side (default 20)")
     sub = p.add_subparsers(dest="engine", required=True, metavar="<engine>")
     for name, mod in ENGINES.items():
-        ep = sub.add_parser(name, help=mod.__doc__.splitlines()[0])
+        ep = sub.add_parser(name, help=(mod.__doc__ or name).split(" — ")[0])
         ops = ep.add_subparsers(dest="op", required=True, metavar="<op>")
         mod.add_ops(ops)
-    c = sub.add_parser("configure", help="write a profile interactively")
-    c.set_defaults(func=_configure, needs_profile=False)
     return p
 
 
 def main(argv=None):
     args = build_parser().parse_args(argv)
     try:
-        profile = load_profile(args.profile) if getattr(args, "needs_profile", True) else {}
+        profile = load_profile(args.profile, find_config(args.config))
         return args.func(args, profile)
     except KeyboardInterrupt:
         return 130

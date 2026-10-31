@@ -4,4 +4,5 @@
 
 - `pg dump`, `pg diff`: pg_dump custom/directory/tar or plain SQL; offline via pg_restore.
 - `neo export`, `neo dump`, `neo diff`: text sidecar `X.dump.txt`; scratch-instance fallback.
-- Profiles in `~/.config/dumputil/config`, `configure`, `--output json`, `--quiet`, table globs.
+- Repo-local `dumputil.ini` (cwd or parents, `--config`, `$DUMPUTIL_CONFIG`); `[DEFAULT]` + profile
+  sections; path keys relative to the ini. `--output json`, `--quiet`, table globs.
