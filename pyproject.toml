@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dumputil"
+dynamic = ["version"]
+description = "Exact schema and content diff of database dumps (PostgreSQL, Neo4j), offline"
+readme = "README.md"
+license = { text = "Apache-2.0" }
+requires-python = ">=3.9"
+authors = [{ name = "sleepturtle2" }]
+keywords = ["postgresql", "neo4j", "pg_dump", "dump", "diff", "backup"]
+classifiers = [
+  "Environment :: Console",
+  "Intended Audience :: Developers",
+  "Intended Audience :: System Administrators",
+  "License :: OSI Approved :: Apache Software License",
+  "Operating System :: MacOS",
+  "Operating System :: POSIX :: Linux",
+  "Programming Language :: Python :: 3",
+  "Topic :: Database",
+  "Topic :: System :: Archiving :: Backup",
+]
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[project.scripts]
+dumputil = "dumputil.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/sleepturtle2/dumputil"
+Issues = "https://github.com/sleepturtle2/dumputil/issues"
+
+[tool.setuptools.dynamic]
+version = { attr = "dumputil.__version__" }
+
+[tool.setuptools.packages.find]
+include = ["dumputil*"]
