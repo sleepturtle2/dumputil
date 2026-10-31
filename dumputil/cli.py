@@ -1,4 +1,3 @@
-"""dumputil <engine> <op> [flags] — argparse tree, profiles, one failure boundary, exit codes."""
 import argparse
 import configparser
 import os
@@ -8,14 +7,14 @@ from pathlib import Path
 from . import __version__
 from .engines import DumpError, neo, pg
 
+"""dumputil <engine> <op> [flags] — argparse tree, profiles, one failure boundary, exit codes."""
+
 ENGINES = {pg.NAME: pg, neo.NAME: neo}
 
 CONFIG_NAME = "dumputil.ini"
 
-# Keys holding paths resolve relative to the ini file's directory, so a repo can point at its own lib/.
 PATH_KEYS = ("pg_bin", "neo4j_home", "neo4j_conf", "java_home", "secrets")
-# *_password_var names the env var holding a password (filled from `secrets`); its value is copied to
-# the var the engine's own tools read.
+
 PASSWORD_VARS = {"pg_password_var": "PGPASSWORD", "neo4j_password_var": "NEO4J_PASSWORD"}
 
 
